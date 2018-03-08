@@ -115,8 +115,8 @@ double inizio_loop_us = 0;
 double fine_loop_us = 0;
 double durata_loop_us = 0;
 
-const char* ssid = "NoirG";
-const char* password = "yakumo99";
+const char* ssid = "";
+const char* password = "";
  
 //int ledPin = 13; // GPIO13
 
