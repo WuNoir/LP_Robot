@@ -71,7 +71,7 @@ double prevKp, prevKi, prevKd;
 #endif
 
 //float turning_speed = 30;                                    //Turning speed (20)
-float max_target_speed = 150*speedconversionNode;                                //Max target speed (100)
+float max_target_speed = 150 * speedconversionNode;                                //Max target speed (100)
 //
 //bool isFirstLoop = true;
 double originalSetpoint = 0;
