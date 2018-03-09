@@ -29,67 +29,33 @@ Don’t forget STBY must be high for the motors to drive.
 //#define DEBUG_TB       // if not commented out, Serial.print() is active! For debugging only!!
 
 
-class MyMotor
+class TB6612Motor
 {
-public:
-MyMotor(int ain1, int ain2, int pwma, int offsetA, int stby)		//constructor      (pin assegnato a in1 o in3, pin assegnato a in2 o in4, pin assegnato a ena o enb)
-		: AIN1oBIN1(ain1), AIN2oBIN2(ain2), PWMAoPWMB(pwma), OFFSETA(offsetA), STBY(stby)  // valori dichiarati piu sotto come privati che sono poi utilizzati all interno della classe MyMotor
-	{}
-
-	void	initialize()      //inizializzazione dei pin in OUTPUT che pilotano il motore da chiamare nel void setup nel file ino principale
-	{
-		pinMode(AIN1oBIN1,OUTPUT);
-		pinMode(AIN2oBIN2,OUTPUT);
-		pinMode(PWMAoPWMB,OUTPUT);
-		pinMode(STBY,OUTPUT);
-		digitalWrite(AIN1oBIN1, LOW);	//aggiunti come da TheDIYGuy999 per mettersi in mode Stop con gli output a OFF
-		digitalWrite(AIN2oBIN2, LOW);	//aggiunti come da TheDIYGuy999 per mettersi in mode Stop con gli output a OFF
-		digitalWrite(PWMAoPWMB, HIGH);	//aggiunti come da TheDIYGuy999 per mettersi in mode Stop con gli output a OFF
-	}
-
-
-	void	moveforward(int SPEED)  //velocita SPEED, PWM con analogwrite sui pin PWMA o PWMB ,    L		H		H		L		H		CCW forward
-	{
-		digitalWrite(AIN1oBIN1,LOW);
-		digitalWrite(AIN2oBIN2,HIGH);
-		analogWrite(PWMAoPWMB,SPEED);
-		digitalWrite(STBY,HIGH);
-    #ifdef DEBUG_TB
-		Serial.println("go newforward!");
-    #endif
-	}
+	public:
 	
-	void	movebackward(int SPEED)  //velocita SPEED, PWM con analogwrite sui pin PWMA o PWMB ,    H		L		H		H		L		CW backward
-	{
-		digitalWrite(AIN1oBIN1,HIGH);
-		digitalWrite(AIN2oBIN2,LOW);
-		analogWrite(PWMAoPWMB,SPEED);
-		digitalWrite(STBY,HIGH);
-    #ifdef DEBUG_TB
-		Serial.println("go newbackward!");
-    #endif
-	}
-	
-	void	stop()
-	{
-		digitalWrite(AIN1oBIN1,LOW);
-		digitalWrite(AIN2oBIN2,LOW);
-		analogWrite(PWMAoPWMB,LOW);
-		digitalWrite(STBY,LOW);  //    L		L		H		OFF		OFF		Stop
-    #ifdef DEBUG_TB
-		Serial.println("newStop!");
-    #endif
-	}
-	
-//~MyMotor();		// destructor  // commentato perche il compilatore non gli piace il destructor penso che l utilizzo sbagliato
+	TB6612Motor(int in1, int in2, int pwm, int offset, int stby);		//constructor 
+	~TB6612Motor();		// destructor  // commentato perche il compilatore non gli piace il destructor penso che l utilizzo sbagliato
 
-private:
-int AIN1oBIN1;
-int AIN2oBIN2;
-int PWMAoPWMB;
-int OFFSETA;
-int STBY;
+	//inizializzazione dei pin in OUTPUT che pilotano il motore da chiamare nel void setup nel file ino principale
+	void	Initialize();      
+
+	//velocita SPEED, PWM con analogwrite sui pin PWM
+	void	Forward(int speed) 
+
+	//velocita SPEED, PWM con analogwrite sui pin PWM
+	void	Backward(int speed)  
+	
+	//obvious Stop
+	void	Stop();
+
+
+	private:
+	
+	int in1;
+	int in2;
+	int pwm;
+	int offset;
+	int stby;
 };	
-
 
 #endif // ends the condition #ifndef TB6612FNG_DC_Motor_driver_H 
