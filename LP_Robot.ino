@@ -12,6 +12,8 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <PID_v1.h> // https://github.com/br3ttb/Arduino-PID-Library/
+#include "HtmlSource.h"
+
 
 // Tabs (header files in sketch directory)
 #include "TB6612FNG_DC_Motor_driver.h"
@@ -126,7 +128,7 @@ const char* password = "";
 #ifdef ESP8266WEBSERVER
 ESP8266WebServer server(80);    //Webserver Object
 #endif
-
+/*
 //HTML Code.................
 const char * htmlMessage = " <!DOCTYPE html> "
 
@@ -274,66 +276,66 @@ const char * cssButton ="<!DOCTYPE html>"
 
 //end Parte WebServer piu veloce che quella dell Esempio WifiBlink
 //end ................WiFi..............
-
+*/
 //inizio parte per ........Motori.................
 //Assegno pin ai motori
-MyMotor motor_left(D2, D0, D1, offsetA, D3);   //(pin assegnato a AIN1, AIN2, PWMA, offsetA, STBY)
+TB6612Motor motor_left(D2, D0, D1, offsetA, D3);   //(pin assegnato a AIN1, AIN2, PWMA, offsetA, STBY)
 //MyMotor motor_right(D4, D5, D8, offsetB, D3);   //(pin assegnato a BIN1, BIN2, PWMB, offsetB, STBY)
-MyMotor motor_right(D4, D5, D9, offsetB, D3);   //(pin assegnato a BIN1, BIN2, PWMB, offsetB, STBY) Per test interrupt su D8 mpu6050
+TB6612Motor motor_right(D4, D5, D9, offsetB, D3);   //(pin assegnato a BIN1, BIN2, PWMB, offsetB, STBY) Per test interrupt su D8 mpu6050
 
 // Funzioni per muovere il Robot 
 void _mForward()
 { 
-  motor_right.moveforward(speed);   //valori per la velocita: min 110 meglio di piu fino a max 255
-  motor_left.moveforward(speed);
+  motor_right.Forward(speed);   //valori per la velocita: min 110 meglio di piu fino a max 255
+  motor_left.Forward(speed);
  // Serial.println("go forward!");
 }
 void _mBack()
 {
-  motor_right.movebackward(speed);
-  motor_left.movebackward(speed);
+  motor_right.Backward(speed);
+  motor_left.Backward(speed);
  // Serial.println("go back!");
 }
 void _mleft()
 {
-  motor_right.moveforward(halfspeed);
-  motor_left.movebackward(halfspeed);
+  motor_right.Forward(halfspeed);
+  motor_left.Backward(halfspeed);
   Serial.println("go left!");  
 }
 void _mleftforward()
 {
-  motor_right.moveforward(speed);
-  motor_left.moveforward(halfspeed);
+  motor_right.Forward(speed);
+  motor_left.Forward(halfspeed);
   Serial.println("go fleft!");
 }
 void _mleftbackward()
 {
-  motor_right.movebackward(speed);
-  motor_left.movebackward(halfspeed);
+  motor_right.Backward(speed);
+  motor_left.Backward(halfspeed);
   Serial.println("go bleft!");
 }
 void _mright()
 {
-  motor_right.movebackward(halfspeed);
-  motor_left.moveforward(halfspeed);
+  motor_right.Backward(halfspeed);
+  motor_left.Forward(halfspeed);
   Serial.println("go right!");  
 }
 void _mrightforward()
 {
-  motor_right.moveforward(halfspeed);
-  motor_left.moveforward(speed);
+  motor_right.Forward(halfspeed);
+  motor_left.Forward(speed);
   Serial.println("go fright!");
 }
 void _mrightbackward()
 {
-  motor_right.movebackward(halfspeed);
-  motor_left.movebackward(speed);
+  motor_right.Backward(halfspeed);
+  motor_left.Backward(speed);
   Serial.println("go bright!");
 }
 void _mStop()
 {
-  motor_right.stop();
-  motor_left.stop();
+  motor_right.Stop();
+  motor_left.Stop();
  // Serial.println("Stop!");
 }
   //fine parte per ............Motori............
@@ -527,8 +529,8 @@ void setup() {
   //------------------------------  inizio parte per motori
   Serial.println();
   Serial.println("Initializing motors");
-  motor_right.initialize();
-  motor_left.initialize();
+  motor_right.Initialize();
+  motor_left.Initialize();
   _mStop();
   Serial.println("Motor Initialized");
 

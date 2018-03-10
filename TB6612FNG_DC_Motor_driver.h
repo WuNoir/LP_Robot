@@ -40,10 +40,10 @@ class TB6612Motor
 	void	Initialize();      
 
 	//velocita SPEED, PWM con analogwrite sui pin PWM
-	void	Forward(int speed) 
+	void	Forward(int speed);
 
 	//velocita SPEED, PWM con analogwrite sui pin PWM
-	void	Backward(int speed)  
+	void	Backward(int speed); 
 	
 	//obvious Stop
 	void	Stop();
