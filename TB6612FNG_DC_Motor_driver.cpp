@@ -1,17 +1,17 @@
 /* Implentation of the class Motor*/
-#include TB6612FNG_DC_Motor_driver.h
-
+#include "TB6612FNG_DC_Motor_driver.h"
+#include <Arduino.h>
 
 TB6612Motor::TB6612Motor(int in1, int in2, int pwm, int offset, int stby)		//constructor      (pin assegnato a in1 o in3, pin assegnato a in2 o in4, pin assegnato a ena o enb)
 	: in1(in1), in2(in2), pwm(pwm), offset(offset), stby(stby)  // valori dichiarati piu sotto come privati che sono poi utilizzati all interno della classe MyMotor
 	{};
 	
-TB6612Motor()::~TB6612Motor()
+TB6612Motor::~TB6612Motor()
 	{ 
 		Stop();
 	};	
 
-void	TB6612Motor::Initialize();     
+void	TB6612Motor::Initialize()     
 	{
 		pinMode(in1,OUTPUT);
 		pinMode(in2,OUTPUT);
@@ -23,7 +23,7 @@ void	TB6612Motor::Initialize();
 	}
 
 
-void	TB6612Motor::Forward(int speed); 
+void	TB6612Motor::Forward(int speed) 
 	{
 		digitalWrite(in1,LOW);
 		digitalWrite(in2,HIGH);
@@ -34,7 +34,7 @@ void	TB6612Motor::Forward(int speed);
 	#endif
 	}
 
-void	TB6612Motor::Backward(int speed); 
+void	TB6612Motor::Backward(int speed) 
 	{
 		digitalWrite(in1,HIGH);
 		digitalWrite(in2,LOW);
@@ -45,7 +45,7 @@ void	TB6612Motor::Backward(int speed);
 	#endif
 	}
 
-void	TB6612Motor::Stop();
+void	TB6612Motor::Stop()
 	{
 		digitalWrite(in1,LOW);
 		digitalWrite(in2,LOW);
