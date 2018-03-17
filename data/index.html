@@ -1,0 +1,75 @@
+<html>
+<head>
+<script>
+var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
+connection.onopen = function(){
+    connection.send('Connect ' + new Date()); 
+};
+
+connection.onerror = function(error){
+    console.log('WebSocket Error ', error);
+};
+
+connection.onmessage = function(e){
+    console.log('Server: ', e.data);
+};
+
+function sendStabilityPID(){
+    var KpS = parseInt(document.getElementById('KpS').value).toString(16);
+    var KiS = parseInt(document.getElementById('KiS').value).toString(16);
+    var KdS = parseInt(document.getElementById('KdS').value).toString(16);
+    
+    if(KpS.length < 2){
+        KpS = '0' + KpS;
+    }   
+    
+    if(KiS.length < 2){
+        KiS = '0' + KiS;
+    }   
+    
+    if(KdS.length < 2){
+        KdS = '0' + KdS;
+    }   
+    
+    var pidS = 'S'+KpS+KiS+KdS;    
+    console.log('StabilityPID: ' + pidS); 
+    connection.send(pidS);
+}
+function sendThrottlePID(){
+    var KpT = parseInt(document.getElementById('KpT').value).toString(16);
+    var KiT = parseInt(document.getElementById('KiT').value).toString(16);
+    var KdT = parseInt(document.getElementById('KdT').value).toString(16);
+    
+    if(KpT.length < 2){
+        KpT = '0' + KpT;
+    }   
+    
+    if(KiT.length < 2){
+        KiT = '0' + KiT;
+    }   
+    
+    if(KdT.length < 2){
+        KdT = '0' + KdT;
+    }   
+    
+    var pidT = 'T'+KpT+KiT+KdT;    
+    console.log('ThrottlePID: ' + pidT); 
+    connection.send(pidT);
+}
+</script>
+</head>
+<body>
+
+
+
+<b>Stability PID Control:</b><br/>
+KpS: <input id="KpS" type="range" min="0" max="255" step="1" onchange="sendStabilityPID();" /><br/>
+KiS: <input id="KiS" type="range" min="0" max="255" step="1" onchange="sendStabilityPID();" /><br/>
+KdS: <input id="KdS" type="range" min="0" max="255" step="1" onchange="sendStabilityPID();" /><br/>
+<br/>
+<b>Throttle PID Control:</b><br/>
+KpT: <input id="KpT" type="range" min="0" max="255" step="1" onchange="sendThrottlePID();" /><br/>
+KiT: <input id="KiT" type="range" min="0" max="255" step="1" onchange="sendThrottlePID();" /><br/>
+KdT: <input id="KdT" type="range" min="0" max="255" step="1" onchange="sendThrottlePID();" /><br/>
+</body>
+</html>

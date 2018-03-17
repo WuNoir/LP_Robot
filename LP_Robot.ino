@@ -2,10 +2,12 @@
 
 // Libraries
 #include <Wire.h> // I2C library so we can communicate with the gyro (for the MPU-6050 gyro /accelerometer)
-
 #include <ESP8266WiFi.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
+#include <WebSocketsServer.h>
+#include <ESP8266mDNS.h>
+#include <Hash.h>
 #include <WiFiManager.h>         //https://github.com/tzapu/WiFiManager
 #include <PID_v1.h> // https://github.com/br3ttb/Arduino-PID-Library/
 #include "HtmlSource.h"
@@ -15,11 +17,12 @@
 #include "MPU6050_NODE.h"
 
 
-#define ESP8266WEBSERVER // if not commented out, ESP8266WebServer di ESP8266Webserver.h for NodeMCU permette di pilotare il Robot via Wifi (Veloce)
+//#define ESP8266WEBSERVER // if not commented out, ESP8266WebServer di ESP8266Webserver.h for NodeMCU permette di pilotare il Robot via Wifi (Veloce)
+#define USEWIFI 1 // use wifi for robot control
 #define DEBUG // if not commented out, Serial.print() is active! For debugging only!!
 #define BALANCING  // if not commented out, Balancing is active
 #define MANUAL_TUNING 1  // per PID preso dal Pablo
-#define CONTROL_PID
+#define CONTROL_PID 1
 #define MPU_ADDRESS 0x68
 
 // Pins for all inputs, keep in mind the PWM defines must be on PWM pins
@@ -61,35 +64,20 @@ int max_speed=255*speedconversionNode;      //255 si Arduino
 
 int Go_mot = 5;       //codificazione della direzione secondo il NumPad
 int getstr;
-#ifdef CONTROL_PID//************************  PID  *********
 
-#if MANUAL_TUNING
-double Kp = 0;                                       //Gain setting for the P-controller
-double Ki = 0;                                      //Gain setting for the I-controller 
-double Kd = 0;                                       //Gain setting for the D-controller 
-#else
-double Kp = 12.5;                                       //Gain setting for the P-controller (15)
-double Ki = 3.7;                                      //Gain setting for the I-controller (1.5)
-double Kd = 0;                                       //Gain setting for the D-controller (30)
-double prevKp, prevKi, prevKd;
-#endif
 
 //float turning_speed = 30;                                    //Turning speed (20)
 float max_target_speed = 150 * speedconversionNode;                                //Max target speed (100)
 //
 //bool isFirstLoop = true;
-double originalSetpoint = 0;
-double CenterAngleOffset = 4.1;          //angolo con centro di gravita equilibrato
-double Setpoint = originalSetpoint-CenterAngleOffset;
-//double movingAngleOffset = 0.5;
-double Input, Output;//, prevOutput;
+
 double MotorOffset= 1;    // percentuale della velocita per rapportarlo all angolo
 //double leftMotorOffset= 1;
 //double rightMotorOffset = 1; // to make the robot turn
 //int moveState = 0; //0 = balance; 1 = back; 2 = forth
 //double roll = 0;
 
-PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
+
 
 #endif // CONTROL_PID//************************  PID  *********
 
@@ -120,26 +108,197 @@ double durata_loop = 0;
 double inizio_loop_us = 0;
 double fine_loop_us = 0;
 double durata_loop_us = 0;
-//
-//const char* ssid = "";
-//const char* password = "";
- 
+
 //int ledPin = 13; // GPIO13
 
-//................WiFi..................
+//#####################################################################################
+//.................WiFi................................................................
+//#####################################################################################
 
 //Parte WebServer piu veloce che quella dell Esempio WifiBlink perche non nel loop
 
-WiFiManager Wifi;
-#ifdef ESP8266WEBSERVER
+//WiFiManager Wifi;
+//#ifdef ESP8266WEBSERVER
+#if USEWIFI
+
+String html_home; // the html extracted from flash
+
+WiFiManager wifi;
+
 ESP8266WebServer server(80);    //Webserver Object
+WebSocketsServer socketServer(81);
+
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) {
+
+    switch(type) {
+        case WStype_DISCONNECTED:
+            Serial.printf("[%u] Disconnected!\n", num);
+            break;
+        case WStype_CONNECTED: {
+            IPAddress ip = webSocket.remoteIP(num);
+            Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
+
+            // send message to client
+            webSocket.sendTXT(num, "Connected");
+        }
+            break;
+        case WStype_TEXT:
+            Serial.printf("[%u] get Text: %s\n", num, payload);
+
+            if(payload[0] == 'S') {
+                // we get Stability PID data
+
+                // decode pid data
+                uint32_t pidS = (uint32_t) strtol((const char *) &payload[1], NULL, 16);
+              // update stability from sliders on web interface ( 0 - 255 )
+               UpdateStabilityPID((pidS >> 16) & 0xFF,(pidS >> 8) & 0xFF, (pidS >> 0) & 0xFF) ;
+            }
+            if(payload[0] == 'T') {
+                // we get Throttle PID data
+
+                // decode pid data
+                uint32_t pidT = (uint32_t) strtol((const char *) &payload[1], NULL, 16);
+              // update stability from sliders on web interface ( 0 - 255 )
+               UpdateThrottlePID((pidT >> 16) & 0xFF,(pidT >> 8) & 0xFF, (pidT >> 0) & 0xFF) ;
+            }
+
+            break;
+    }
+
+}
+
+void prepareFile(){
+  
+  Serial.println("Prepare file system");
+  SPIFFS.begin();
+  
+  File file = SPIFFS.open("/home.html", "r");
+  if (!file) {
+    Serial.println("file open failed");  
+  } else{
+    Serial.println("file open success");
+
+    html_home = "";
+    while (file.available()) {
+      //Serial.write(file.read());
+      String line = file.readStringUntil('\n');
+      html_home += line + "\n";
+    }
+    file.close();
+
+    Serial.print(html_home);
+  }
+}
+
+//#####################################################################################
+//.................PID.................................................................
+//#####################################################################################
+#ifdef CONTROL_PID//************************  PID  *********
+
+#if MANUAL_TUNING
+double Kp = 0;                                       //Gain setting for the P-controller
+double Ki = 0;                                      //Gain setting for the I-controller 
+double Kd = 0;                                       //Gain setting for the D-controller 
+#else
+double Kp = 12.5;                                       //Gain setting for the P-controller (15)
+double Ki = 3.7;                                      //Gain setting for the I-controller (1.5)
+double Kd = 0;                                       //Gain setting for the D-controller (30)
+double prevKp, prevKi, prevKd;
 #endif
 
+// Stability (Mostly PD)..............................................................
+double originalSetpointStability = 0;
+double CenterAngleOffset = 4.1;          //angolo con centro di gravita equilibrato
+double SetpointStability = originalSetpointStability-CenterAngleOffset;
+double InputStability, OutputStability;
+double KpS = 0;                                       //Gain setting for the P-controller
+double KiS = 0;                                      //Gain setting for the I-controller 
+double KdS = 0;                                       //Gain setting for the D-controller
+double prevKpS, prevKiS, prevKdS;
+#if !USEWIFI // balancing for testing
+KpS = 30.0;
+KiS = 0.0;
+KdS = 5.0;
+#endif
+PID stabilityPID(&InputStability, &OutputStability, &SetpointStability, KpS, KiS, KdS, DIRECT);
+void UpdateStabilityPID(byte kp, byte ki, byte kd)
+{
+  // scale sliders for good value in PID ( experimental )
+   
+  stabilityPID.SetTunings(
+  
+  
+}
+
+
+// Throttle (Mostly PI)............................................................
+double originalSetpointThrottle = 0;
+double SetpointThrottle = originalSetpointThrottle;
+double InputThrottle, OutputThrottle;
+double KpT = 0;                                       //Gain setting for the P-controller
+double KiT = 0;                                      //Gain setting for the I-controller 
+double KdT = 0;                                       //Gain setting for the D-controller
+double prevKpT, prevKiT, prevKdT;
+#if !USEWIFI // balancing for testing
+KpT = 30.0;
+KiT = 5.0;
+KdT = 0.0;
+#endif
+
+
+PID throttlePID(&InputThrottle, &OutputThrottle, &SetpointThrottle, Kp, Ki, Kd, DIRECT);
+void UpdateStabilityPID(byte kp, byte ki, byte kd)
+{
+  // scale sliders for good value in PID ( experimental )
+   
+  throttlePID.SetTunings(
+  
+  
+}
+
+void setupPids(){
+
+ 
+/*
+  // Speed control loop
+  speedPid.SetSampleTime(8); // calcualte every 4ms = 250Hz
+  speedPid.SetOutputLimits(-33, 33); // output range from -33 to 33 (same as in balancing() )
+  speedPid.SetMode(AUTOMATIC);
+
+  // Angle control loop
+  anglePid.SetSampleTime(8); // calcualte every 4ms = 250Hz
+  anglePid.SetOutputLimits(-43, 43); // output range from -43 to 43 for motor
+  anglePid.SetMode(AUTOMATIC);
+*/
+    Serial.println("Setup PID");
+    
+    stabilityPID.SetMode(AUTOMATIC);
+    stabilityPID.SetSampleTime(5);             //PID Sample Time 4ms
+    stabilityPID.SetOutputLimits(-max_speed, max_speed);
+    
+    Serial.println("Setup PID done");
+}
+
+#endif
+
+//#####################################################################################
+//.................Balancing...........................................................
+//#####################################################################################
+
+
+
+
+
+
+
+//#####################################################################################
+//.................Motor...............................................................
+//#####################################################################################
 //inizio parte per ........Motori.................
 //Assegno pin ai motori
 TB6612Motor motor_left(D2, D0, D1, offsetA, D3);   //(pin assegnato a AIN1, AIN2, PWMA, offsetA, STBY)
 //MyMotor motor_right(D4, D5, D8, offsetB, D3);   //(pin assegnato a BIN1, BIN2, PWMB, offsetB, STBY)
-TB6612Motor motor_right(D4, D5, D9, offsetB, D3);   //(pin assegnato a BIN1, BIN2, PWMB, offsetB, STBY) Per test interrupt su D8 mpu6050
+TB6612Motor motor_right(D4, D5, D8, offsetB, D3);   //(pin assegnato a BIN1, BIN2, PWMB, offsetB, STBY) Per test interrupt su D8 mpu6050
 
 // Funzioni per muovere il Robot 
 void _mForward()
@@ -254,7 +413,7 @@ void balancing() {
   //mpu.ReadData();
   mpu.ProcessData();
 
-#ifdef CONTROL_PID//************************  PID  *********
+#if CONTROL_PID//************************  PID  *********
     Setpoint = originalSetpoint-CenterAngleOffset;
         myPID.Compute(); 
    // Input = Angle_Pitch;
@@ -298,7 +457,6 @@ void balancing() {
        myPID.SetTunings(Kp, Ki, Kd);
     
         
-#endif // CONTROL_PID//************************  PID  *********
 
    
 //  angleMeasured = angle_pitch - tiltCalibration;
@@ -345,34 +503,7 @@ void balancing() {
   */
 }
 
-#ifdef CONTROL_PID//************************  PID  *********    
-void setupPid(){
-  
 
- Kp = 30;   //45;                                   
- Ki = 0;                                      
- Kd = 0;      
- 
- 
-/*
-  // Speed control loop
-  speedPid.SetSampleTime(8); // calcualte every 4ms = 250Hz
-  speedPid.SetOutputLimits(-33, 33); // output range from -33 to 33 (same as in balancing() )
-  speedPid.SetMode(AUTOMATIC);
-
-  // Angle control loop
-  anglePid.SetSampleTime(8); // calcualte every 4ms = 250Hz
-  anglePid.SetOutputLimits(-43, 43); // output range from -43 to 43 for motor
-  anglePid.SetMode(AUTOMATIC);
-*/
-    Serial.println("Setup PID");
-    
-    myPID.SetMode(AUTOMATIC);
-    myPID.SetSampleTime(4);             //PID Sample Time 4ms
-    myPID.SetOutputLimits(-max_speed, max_speed);
-    
-    Serial.println("Setup PID done");
-}
 #endif // CONTROL_PID//************************  PID  *********
 
 #endif      //************************************************
@@ -413,13 +544,14 @@ void setup() {
   
  // pinMode(ledPin, OUTPUT);
  // digitalWrite(ledPin, LOW);
-#ifdef ESP8266WEBSERVER //--------------------------------------------------------------------ESP8266WEBSERVER--------- 
+#if USEWIFI
+//#ifdef ESP8266WEBSERVER //--------------------------------------------------------------------ESP8266WEBSERVER--------- 
   // Connect to WiFi network
   Serial.println();
   Serial.println();
 
  //parte wifi comune a ESP8266WiFi.h  e  ESP8266WebServer.h
-  Wifi.autoConnect("AutoConnectAP");
+  wifi.autoConnect("AutoConnectAP");
  
   while (WiFi.status() != WL_CONNECTED) {     //Wait for connection
     delay(500);
@@ -437,10 +569,10 @@ void setup() {
   Serial.print("http://");
   Serial.print(WiFi.localIP());
   Serial.println("/");
-#endif                  //--------------------------------------------------------------------ESP8266WEBSERVER---------
-  
- //Parte WebServer piu veloce che quella dell Esempio WifiBlink perche non nel loop
-#ifdef ESP8266WEBSERVER //--------------------------------------------------------------------ESP8266WEBSERVER---------
+//#endif                  //--------------------------------------------------------------------ESP8266WEBSERVER---------
+//  
+// //Parte WebServer piu veloce che quella dell Esempio WifiBlink perche non nel loop
+//#ifdef ESP8266WEBSERVER //--------------------------------------------------------------------ESP8266WEBSERVER---------
 
 //parte per visualizzare dati
  server.on("/Kp.txt", [](){
@@ -609,7 +741,8 @@ void loop() {
 //double inizio_loop = millis();
  inizio_loop_us = micros();
 
-#ifdef ESP8266WEBSERVER //--------------------------------------------------------------------ESP8266WEBSERVER---------
+#if USEWIFI
+//#ifdef ESP8266WEBSERVER //--------------------------------------------------------------------ESP8266WEBSERVER---------
   server.handleClient(); //Handling of incoming requests
 #endif                  //--------------------------------------------------------------------ESP8266WEBSERVER---------end
 
