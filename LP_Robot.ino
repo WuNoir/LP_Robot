@@ -15,15 +15,23 @@
 #include "TB6612FNG_DC_Motor_driver.h"
 #include "RobotConfig.h"
 #include "MPU6050_NODE.h"
+#include <ArduinoJson.h>
+
+
+
+
 
 
 //#define ESP8266WEBSERVER // if not commented out, ESP8266WebServer di ESP8266Webserver.h for NodeMCU permette di pilotare il Robot via Wifi (Veloce)
 #define USEWIFI 1 // use wifi for robot control
-#define DEBUG // if not commented out, Serial.print() is active! For debugging only!!
-#define BALANCING  // if not commented out, Balancing is active
+#define DEBUG 0// if not commented out, Serial.print() is active! For debugging only!!
+#define BALANCING  1// if not commented out, Balancing is active
 #define MANUAL_TUNING 1  // per PID preso dal Pablo
 #define CONTROL_PID 1
 #define MPU_ADDRESS 0x68
+#define JSON_BUFF_DIMENSION 2500
+
+#define KPS_FACTOR 
 
 // Pins for all inputs, keep in mind the PWM defines must be on PWM pins
 
@@ -81,24 +89,7 @@ double MotorOffset= 1;    // percentuale della velocita per rapportarlo all ango
 
 #endif // CONTROL_PID//************************  PID  *********
 
-#ifdef BALANCING //***************************************
-MPU6050 mpu ( D7, D6 , MPU_ADDRESS );
 
-
-//preso da TheDIYGuy999
-// The size of this struct should not exceed 32 bytes
-struct RcData {
-  byte axis1; // Aileron (Steering for car)
-  byte axis2; // Elevator
-  byte axis3; // Throttle
-  byte axis4; // Rudder
-  boolean mode1 = false; // Mode1 (toggle speed limitation)
-  boolean mode2 = false; // Mode2 (toggle acc. / dec. limitation)
-  boolean momentary1 = false; // Momentary push button
-  byte pot1; // Potentiometer
-};
-RcData data;
-#endif                      //******************************************
 
 unsigned long loop_timer=0;
 double l_timer=1000;
@@ -151,15 +142,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
                 // decode pid data
                 uint32_t pidS = (uint32_t) strtol((const char *) &payload[1], NULL, 16);
               // update stability from sliders on web interface ( 0 - 255 )
-               UpdateStabilityPID((pidS >> 16) & 0xFF,(pidS >> 8) & 0xFF, (pidS >> 0) & 0xFF) ;
+               UpdateStabilityPID((pidS >> 20) & 0xFFF,(pidS >> 10) & 0xFFF, (pidS >> 0) & 0xFFF) ;
             }
-            if(payload[0] == 'T') {
+            else if(payload[0] == 'T') {
                 // we get Throttle PID data
 
                 // decode pid data
                 uint32_t pidT = (uint32_t) strtol((const char *) &payload[1], NULL, 16);
               // update stability from sliders on web interface ( 0 - 255 )
-               UpdateThrottlePID((pidT >> 16) & 0xFF,(pidT >> 8) & 0xFF, (pidT >> 0) & 0xFF) ;
+               UpdateThrottlePID((pidT >> 20) & 0xFFF,(pidT >> 10) & 0xFFF, (pidT >> 0) & 0xFFF) ;
             }
 
             break;
@@ -193,18 +184,8 @@ void prepareFile(){
 //#####################################################################################
 //.................PID.................................................................
 //#####################################################################################
-#ifdef CONTROL_PID//************************  PID  *********
+#if CONTROL_PID
 
-#if MANUAL_TUNING
-double Kp = 0;                                       //Gain setting for the P-controller
-double Ki = 0;                                      //Gain setting for the I-controller 
-double Kd = 0;                                       //Gain setting for the D-controller 
-#else
-double Kp = 12.5;                                       //Gain setting for the P-controller (15)
-double Ki = 3.7;                                      //Gain setting for the I-controller (1.5)
-double Kd = 0;                                       //Gain setting for the D-controller (30)
-double prevKp, prevKi, prevKd;
-#endif
 
 // Stability (Mostly PD)..............................................................
 double originalSetpointStability = 0;
@@ -258,23 +239,14 @@ void UpdateStabilityPID(byte kp, byte ki, byte kd)
 
 void setupPids(){
 
- 
-/*
-  // Speed control loop
-  speedPid.SetSampleTime(8); // calcualte every 4ms = 250Hz
-  speedPid.SetOutputLimits(-33, 33); // output range from -33 to 33 (same as in balancing() )
-  speedPid.SetMode(AUTOMATIC);
-
-  // Angle control loop
-  anglePid.SetSampleTime(8); // calcualte every 4ms = 250Hz
-  anglePid.SetOutputLimits(-43, 43); // output range from -43 to 43 for motor
-  anglePid.SetMode(AUTOMATIC);
-*/
     Serial.println("Setup PID");
     
     stabilityPID.SetMode(AUTOMATIC);
     stabilityPID.SetSampleTime(5);             //PID Sample Time 4ms
     stabilityPID.SetOutputLimits(-max_speed, max_speed);
+	throttlePID.SetMode(AUTOMATIC);
+    throttlePID.SetSampleTime(5);             //PID Sample Time 4ms
+    throttlePID.SetOutputLimits(-max_angle, max_angle);
     
     Serial.println("Setup PID done");
 }
@@ -282,10 +254,31 @@ void setupPids(){
 #endif
 
 //#####################################################################################
-//.................Balancing...........................................................
+//.................Remote Control......................................................
 //#####################################################################################
 
 
+//preso da TheDIYGuy999
+// The size of this struct should not exceed 32 bytes
+struct RcData {
+  byte axis1; // Aileron (Steering for car)
+  byte axis2; // Elevator
+  byte axis3; // Throttle
+  byte axis4; // Rudder
+  boolean mode1 = false; // Mode1 (toggle speed limitation)
+  boolean mode2 = false; // Mode2 (toggle acc. / dec. limitation)
+  boolean momentary1 = false; // Momentary push button
+  byte pot1; // Potentiometer
+};
+RcData data;
+
+
+
+//#####################################################################################
+//.................Balancing...........................................................
+//#####################################################################################
+
+MPU6050 mpu ( D7, D6 , MPU_ADDRESS );
 
 
 

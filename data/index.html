@@ -14,6 +14,21 @@ connection.onmessage = function(e){
     console.log('Server: ', e.data);
 };
 
+// context is string STABILITY or Throttle
+// kp, ki, kd  are 8bit values of the sliders
+function SendPIDValues( command, kp, ki, kd )
+{
+  var msg = {
+    Context: command,
+    KP: kp,
+    KI: ki,
+    KD: kd
+  };
+
+  connection.send(JSON.stringify(msg));
+
+}
+
 function sendStabilityPID(){
     var KpS = parseInt(document.getElementById('KpS').value).toString(16);
     var KiS = parseInt(document.getElementById('KiS').value).toString(16);
@@ -63,13 +78,13 @@ function sendThrottlePID(){
 
 
 <b>Stability PID Control:</b><br/>
-KpS: <input id="KpS" type="range" min="0" max="255" step="1" onchange="sendStabilityPID();" /><br/>
-KiS: <input id="KiS" type="range" min="0" max="255" step="1" onchange="sendStabilityPID();" /><br/>
-KdS: <input id="KdS" type="range" min="0" max="255" step="1" onchange="sendStabilityPID();" /><br/>
+KpS: <input id="KpS" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( STABILITY,KpS,KiS,KdS );" /><br/>
+KiS: <input id="KiS" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( STABILITY,KpS,KiS,KdS );" /><br/>
+KdS: <input id="KdS" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( STABILITY,KpS,KiS,KdS );" /><br/>
 <br/>
 <b>Throttle PID Control:</b><br/>
-KpT: <input id="KpT" type="range" min="0" max="255" step="1" onchange="sendThrottlePID();" /><br/>
-KiT: <input id="KiT" type="range" min="0" max="255" step="1" onchange="sendThrottlePID();" /><br/>
-KdT: <input id="KdT" type="range" min="0" max="255" step="1" onchange="sendThrottlePID();" /><br/>
+KpT: <input id="KpT" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( THROTTLE,KpT,KiT,KdT );" /><br/>
+KiT: <input id="KiT" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( THROTTLE,KpT,KiT,KdT );" /><br/>
+KdT: <input id="KdT" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( THROTTLE,KpT,KiT,KdT );" /><br/>
 </body>
 </html>
