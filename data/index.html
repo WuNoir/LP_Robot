@@ -1,5 +1,59 @@
 <html>
 <head>
+<meta name="viewport" content="height=device-height, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+<style type="text/css">
+.btn-command
+{
+font-size: 30px;
+border : none;
+border-radius : 5px;
+width:30%;
+padding: 50px 30px;
+}
+.row
+{
+margin-bottom:5px;
+min-height:100px ;
+max-width:600px;
+}
+.slidecontainer {
+    width: 100%;
+}
+.slider {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 15px;
+    border-radius: 5px;
+    background: #d3d3d3;
+    outline: none;
+    opacity: 0.7;
+    -webkit-transition: .2s;
+    transition: opacity .2s;
+}
+
+.slider:hover {
+    opacity: 1;
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    background: #4CAF50;
+    cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    background: #4CAF50;
+    cursor: pointer;
+}
+</style>
 <script>
 var connection = new WebSocket('ws://'+location.hostname+':81/', ['arduino']);
 connection.onopen = function(){
@@ -14,7 +68,7 @@ connection.onmessage = function(e){
     console.log('Server: ', e.data);
 };
 
-// context is string STABILITY or Throttle
+// context is string STABILITY or THROTTLE
 // kp, ki, kd  are 8bit values of the sliders
 function SendPIDValues( command, kp, ki, kd )
 {
@@ -29,7 +83,25 @@ function SendPIDValues( command, kp, ki, kd )
 
 }
 
-function sendStabilityPID(){
+// function to send direction for the robot remote controls
+// Context = "DIRECTION"
+// direction code 
+// 7 9 8
+// 4 5 6  
+// 1 2 3 
+
+function SendRobotDirection ( directionCode)
+{
+	var msg = {
+    Context: "DIRECTION",
+    DIR : directionCode
+  };
+
+  connection.send(JSON.stringify(msg));
+
+}
+
+/*function sendStabilityPID(){
     var KpS = parseInt(document.getElementById('KpS').value).toString(16);
     var KiS = parseInt(document.getElementById('KiS').value).toString(16);
     var KdS = parseInt(document.getElementById('KdS').value).toString(16);
@@ -70,21 +142,87 @@ function sendThrottlePID(){
     var pidT = 'T'+KpT+KiT+KdT;    
     console.log('ThrottlePID: ' + pidT); 
     connection.send(pidT);
-}
+}*/
 </script>
 </head>
 <body>
+<div class = "row">
+			<button id='upleft' name="direction" value="upleft" class="btn-command" > <i class="fa fa-reply"></i>
+			</button>
+			<button id='up' name="direction" value="up" class="btn-command"  > <i class="fa fa-arrow-up"></i>
+			</button>
+			<button id='upright' name="direction" value="upright" class="btn-command"  > <i class="fa fa-share"></i>
+			</button>
+</div>
+<div class = "row">
+			<button id='left' name="direction" value="left" class="btn-command" > <i class="fa fa-arrow-left"></i>
+			</button>
+			<button id='stop' name="direction" value="stop" class="btn-command"  > <i class="fa fa-stop"></i>
+			</button>
+			<button id='right' name="direction" value="right" class="btn-command"  > <i class="fa fa-arrow-right"></i>
+			</button>
+</div>
+<div class = "row">
+			<button id='downleft' name="direction" value="downleft" class="btn-command" > <i class="fa fa-share fa-rotate-180"></i>
+			</button>
+			<button id='down' name="direction" value="down" class="btn-command"  > <i class="fa fa-arrow-down"></i>
+			</button>
+			<button id='downright' name="direction" value="downright" class="btn-command"  > <i class="fa fa-reply fa-rotate-180"></i>
+			</button>
+</div>
 
+<b>Throttle PI Control:</b><br/>
+<div class="slidecontainer">
+  <p>Kp: <span id="KpT"></span></p>
+  <input type="range" min="0" max="1023" value="512" class="slider" id="KpTRange" onchange="SendPIDValues( "THROTTLE",KpT,KiT,KdT );" >
+</div>
+<div class="slidecontainer">
+  <p>Ki: <span id="KiT"></span></p>
+  <input type="range" min="0" max="1023" value="512" class="slider" id="KiTRange" onchange="SendPIDValues( "THROTTLE",KpT,KiT,KdT );" >
+</div>
 
-
-<b>Stability PID Control:</b><br/>
-KpS: <input id="KpS" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( STABILITY,KpS,KiS,KdS );" /><br/>
-KiS: <input id="KiS" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( STABILITY,KpS,KiS,KdS );" /><br/>
-KdS: <input id="KdS" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( STABILITY,KpS,KiS,KdS );" /><br/>
 <br/>
-<b>Throttle PID Control:</b><br/>
-KpT: <input id="KpT" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( THROTTLE,KpT,KiT,KdT );" /><br/>
-KiT: <input id="KiT" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( THROTTLE,KpT,KiT,KdT );" /><br/>
-KdT: <input id="KdT" type="range" min="0" max="1023" step="1" onchange="SendPIDValues( THROTTLE,KpT,KiT,KdT );" /><br/>
+<b>Stability PD Control:</b><br/>
+<div class="slidecontainer">
+  <p>Kp: <span id="KpS"></span></p>
+  <input type="range" min="0" max="1023" value="512" class="slider" id="KpSRange" onchange="SendPIDValues( "STABILITY",KpS,KiS,KdS );" >
+</div>
+<div class="slidecontainer">
+  <p>Ki: <span id="KdS"></span></p>
+  <input type="range" min="0" max="1023" value="512" class="slider" id="KdSRange" onchange="SendPIDValues( "STABILITY",KpS,KiS,KdS );" >
+</div>
+
+<script>
+var sliderKpT = document.getElementById("KpTRange");
+var outputKpT = document.getElementById("KpT");
+outputKpT.innerHTML = sliderKpT.value;
+
+sliderKpT.oninput = function() {
+  outputKpT.innerHTML = this.value;
+}
+
+var sliderKiT = document.getElementById("KiTRange");
+var outputKiT = document.getElementById("KiT");
+outputKiT.innerHTML = sliderKiT.value;
+
+sliderKiT.oninput = function() {
+  outputKiT.innerHTML = this.value;
+}
+
+var sliderKpS = document.getElementById("KpSRange");
+var outputKpS = document.getElementById("KpS");
+outputKpS.innerHTML = sliderKpS.value;
+
+sliderKpS.oninput = function() {
+  outputKpS.innerHTML = this.value;
+}
+var sliderKdS = document.getElementById("KdSRange");
+var outputKdS = document.getElementById("KdS");
+outputKdS.innerHTML = sliderKdS.value;
+
+sliderKdS.oninput = function() {
+  outputKdS.innerHTML = this.value;
+}
+</script>
 </body>
 </html>

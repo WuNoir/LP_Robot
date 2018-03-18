@@ -1,5 +1,4 @@
 
-
 // Libraries
 #include <Wire.h> // I2C library so we can communicate with the gyro (for the MPU-6050 gyro /accelerometer)
 #include <ESP8266WiFi.h>
@@ -10,16 +9,13 @@
 #include <Hash.h>
 #include <WiFiManager.h>         //https://github.com/tzapu/WiFiManager
 #include <PID_v1.h> // https://github.com/br3ttb/Arduino-PID-Library/
+#include <ArduinoJson.h> 
 #include "HtmlSource.h"
 // Tabs (header files in sketch directory)
 #include "TB6612FNG_DC_Motor_driver.h"
 #include "RobotConfig.h"
 #include "MPU6050_NODE.h"
-#include <ArduinoJson.h>
-
-
-
-
+#include "FS.h"
 
 
 //#define ESP8266WEBSERVER // if not commented out, ESP8266WebServer di ESP8266Webserver.h for NodeMCU permette di pilotare il Robot via Wifi (Veloce)
@@ -29,7 +25,7 @@
 #define MANUAL_TUNING 1  // per PID preso dal Pablo
 #define CONTROL_PID 1
 #define MPU_ADDRESS 0x68
-#define JSON_BUFF_DIMENSION 2500
+#define JSON_BUFF_DIMENSION 200
 
 #define KPS_FACTOR 
 
@@ -70,6 +66,8 @@ int halfspeed=speed/2;                    // per girare
 int min_speed=40*speedconversionNode;       // 50 su Arduino
 int max_speed=255*speedconversionNode;      //255 si Arduino
 
+int max_angle = 20 ;
+
 int Go_mot = 5;       //codificazione della direzione secondo il NumPad
 int getstr;
 
@@ -87,18 +85,8 @@ double MotorOffset= 1;    // percentuale della velocita per rapportarlo all ango
 
 
 
-#endif // CONTROL_PID//************************  PID  *********
 
 
-
-unsigned long loop_timer=0;
-double l_timer=1000;
-double inizio_loop = 0;
-double fine_loop = 0;
-double durata_loop = 0;
-double inizio_loop_us = 0;
-double fine_loop_us = 0;
-double durata_loop_us = 0;
 
 //int ledPin = 13; // GPIO13
 
@@ -113,11 +101,13 @@ double durata_loop_us = 0;
 #if USEWIFI
 
 String html_home; // the html extracted from flash
+StaticJsonBuffer<JSON_BUFF_DIMENSION> jsonBuffer;
+
 
 WiFiManager wifi;
 
 ESP8266WebServer server(80);    //Webserver Object
-WebSocketsServer socketServer(81);
+WebSocketsServer webSocket(81);
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) {
 
@@ -135,22 +125,18 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
             break;
         case WStype_TEXT:
             Serial.printf("[%u] get Text: %s\n", num, payload);
-
-            if(payload[0] == 'S') {
+			JsonObject& root = jsonBuffer.parseObject(payload);
+			const char* command = root["Command"];
+			int Kp = root["KP"];
+			int Ki = root["KI"];
+			int Kd = root["KD"];
+            if(command == "STABILITY") {
                 // we get Stability PID data
-
-                // decode pid data
-                uint32_t pidS = (uint32_t) strtol((const char *) &payload[1], NULL, 16);
-              // update stability from sliders on web interface ( 0 - 255 )
-               UpdateStabilityPID((pidS >> 20) & 0xFFF,(pidS >> 10) & 0xFFF, (pidS >> 0) & 0xFFF) ;
+               UpdateStabilityPID(Kp,Ki,Kd) ;
             }
-            else if(payload[0] == 'T') {
+            else if(command == "THROTTLE") {
                 // we get Throttle PID data
-
-                // decode pid data
-                uint32_t pidT = (uint32_t) strtol((const char *) &payload[1], NULL, 16);
-              // update stability from sliders on web interface ( 0 - 255 )
-               UpdateThrottlePID((pidT >> 20) & 0xFFF,(pidT >> 10) & 0xFFF, (pidT >> 0) & 0xFFF) ;
+               UpdateThrottlePID(Kp,Ki,Kd) ;
             }
 
             break;
@@ -158,12 +144,12 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
 
 }
 
-void prepareFile(){
+void PrepareFile(){
   
   Serial.println("Prepare file system");
   SPIFFS.begin();
   
-  File file = SPIFFS.open("/home.html", "r");
+  File file = SPIFFS.open("/index.html", "r");
   if (!file) {
     Serial.println("file open failed");  
   } else{
@@ -180,11 +166,20 @@ void prepareFile(){
     Serial.print(html_home);
   }
 }
-
+#endif
 //#####################################################################################
 //.................PID.................................................................
 //#####################################################################################
 #if CONTROL_PID
+
+unsigned long loop_timer=0;
+double l_timer=1000;
+double inizio_loop = 0;
+double fine_loop = 0;
+double durata_loop = 0;
+double inizio_loop_us = 0;
+double fine_loop_us = 0;
+double durata_loop_us = 0;
 
 
 // Stability (Mostly PD)..............................................................
@@ -202,11 +197,11 @@ KiS = 0.0;
 KdS = 5.0;
 #endif
 PID stabilityPID(&InputStability, &OutputStability, &SetpointStability, KpS, KiS, KdS, DIRECT);
-void UpdateStabilityPID(byte kp, byte ki, byte kd)
+void UpdateStabilityPID(int kp, int ki, int kd)
 {
   // scale sliders for good value in PID ( experimental )
    
-  stabilityPID.SetTunings(
+  stabilityPID.SetTunings(KpS, KiS, KdS);
   
   
 }
@@ -227,12 +222,12 @@ KdT = 0.0;
 #endif
 
 
-PID throttlePID(&InputThrottle, &OutputThrottle, &SetpointThrottle, Kp, Ki, Kd, DIRECT);
-void UpdateStabilityPID(byte kp, byte ki, byte kd)
+PID throttlePID(&InputThrottle, &OutputThrottle, &SetpointThrottle, KpT, KiT, KdT, DIRECT);
+void UpdateThrottlePID(int kp, int ki, int kd)
 {
   // scale sliders for good value in PID ( experimental )
    
-  throttlePID.SetTunings(
+  throttlePID.SetTunings(KpT, KiT, KdT);
   
   
 }
@@ -277,6 +272,13 @@ RcData data;
 //#####################################################################################
 //.................Balancing...........................................................
 //#####################################################################################
+long timer_old;
+long timer_value;
+int debug_counter;
+float debugVariable;
+float dt;
+
+
 
 MPU6050 mpu ( D7, D6 , MPU_ADDRESS );
 
@@ -287,67 +289,78 @@ MPU6050 mpu ( D7, D6 , MPU_ADDRESS );
 //#####################################################################################
 //.................Motor...............................................................
 //#####################################################################################
+int16_t motor1;
+int16_t motor2;
+
+int16_t speed_M1, speed_M2;        // Actual speed of motors
+int8_t  dir_M1, dir_M2;            // Actual direction of steppers motors
+int16_t actual_robot_speed;        // overall robot speed (measured from steppers speed)
+int16_t actual_robot_speed_Old;
+float estimated_speed_filtered;    // Estimated robot speed
+
+
+
 //inizio parte per ........Motori.................
 //Assegno pin ai motori
 TB6612Motor motor_left(D2, D0, D1, offsetA, D3);   //(pin assegnato a AIN1, AIN2, PWMA, offsetA, STBY)
 //MyMotor motor_right(D4, D5, D8, offsetB, D3);   //(pin assegnato a BIN1, BIN2, PWMB, offsetB, STBY)
 TB6612Motor motor_right(D4, D5, D8, offsetB, D3);   //(pin assegnato a BIN1, BIN2, PWMB, offsetB, STBY) Per test interrupt su D8 mpu6050
 
-// Funzioni per muovere il Robot 
-void _mForward()
-{ 
-  motor_right.Forward(speed);   //valori per la velocita: min 110 meglio di piu fino a max 255
-  motor_left.Forward(speed);
- // Serial.println("go forward!");
-}
-void _mBack()
-{
-  motor_right.Backward(speed);
-  motor_left.Backward(speed);
- // Serial.println("go back!");
-}
-void _mleft()
-{
-  motor_right.Forward(halfspeed);
-  motor_left.Backward(halfspeed);
-  Serial.println("go left!");  
-}
-void _mleftforward()
-{
-  motor_right.Forward(speed);
-  motor_left.Forward(halfspeed);
-  Serial.println("go fleft!");
-}
-void _mleftbackward()
-{
-  motor_right.Backward(speed);
-  motor_left.Backward(halfspeed);
-  Serial.println("go bleft!");
-}
-void _mright()
-{
-  motor_right.Backward(halfspeed);
-  motor_left.Forward(halfspeed);
-  Serial.println("go right!");  
-}
-void _mrightforward()
-{
-  motor_right.Forward(halfspeed);
-  motor_left.Forward(speed);
-  Serial.println("go fright!");
-}
-void _mrightbackward()
-{
-  motor_right.Backward(halfspeed);
-  motor_left.Backward(speed);
-  Serial.println("go bright!");
-}
-void _mStop()
-{
-  motor_right.Stop();
-  motor_left.Stop();
- // Serial.println("Stop!");
-}
+//Funzioni per muovere il Robot 
+// void _mForward()
+// { 
+  // motor_right.Forward(speed);   //valori per la velocita: min 110 meglio di piu fino a max 255
+  // motor_left.Forward(speed);
+ //Serial.println("go forward!");
+// }
+// void _mBack()
+// {
+  // motor_right.Backward(speed);
+  // motor_left.Backward(speed);
+ //Serial.println("go back!");
+// }
+// void _mleft()
+// {
+  // motor_right.Forward(halfspeed);
+  // motor_left.Backward(halfspeed);
+  // Serial.println("go left!");  
+// }
+// void _mleftforward()
+// {
+  // motor_right.Forward(speed);
+  // motor_left.Forward(halfspeed);
+  // Serial.println("go fleft!");
+// }
+// void _mleftbackward()
+// {
+  // motor_right.Backward(speed);
+  // motor_left.Backward(halfspeed);
+  // Serial.println("go bleft!");
+// }
+// void _mright()
+// {
+  // motor_right.Backward(halfspeed);
+  // motor_left.Forward(halfspeed);
+  // Serial.println("go right!");  
+// }
+// void _mrightforward()
+// {
+  // motor_right.Forward(halfspeed);
+  // motor_left.Forward(speed);
+  // Serial.println("go fright!");
+// }
+// void _mrightbackward()
+// {
+  // motor_right.Backward(halfspeed);
+  // motor_left.Backward(speed);
+  // Serial.println("go bright!");
+// }
+// void _mStop()
+// {
+  // motor_right.Stop();
+  // motor_left.Stop();
+ //Serial.println("Stop!");
+// }
   //fine parte per ............Motori............
 
   
@@ -381,7 +394,7 @@ void driveMotorsBalancing() {
 //    Motor1.drive(50, minPWM, maxPWMfull, 0, false); // left caterpillar, 0ms ramp!
 //    Motor2.drive(50, minPWM, maxPWMfull, 0, false); // right caterpillar
 //  }
-
+/*
   if (mpu.Angle_Pitch + CenterAngleOffset > -30.0 && mpu.Angle_Pitch + CenterAngleOffset < -2.0) { // Only drive motors, if robot stands upright
 
      _mBack();
@@ -392,6 +405,7 @@ void driveMotorsBalancing() {
   else {
     _mStop();
     }
+    */
 }
 
 //
@@ -401,7 +415,7 @@ void driveMotorsBalancing() {
 //
 
 void balancing() {
-
+/*
   // Read sensor data
   //mpu.ReadData();
   mpu.ProcessData();
@@ -450,7 +464,7 @@ void balancing() {
        myPID.SetTunings(Kp, Ki, Kd);
     
         
-
+*/
    
 //  angleMeasured = angle_pitch - tiltCalibration;
 /*    inibisco il potentiometer
@@ -499,7 +513,7 @@ void balancing() {
 
 #endif // CONTROL_PID//************************  PID  *********
 
-#endif      //************************************************
+//#endif      //************************************************
 
 //---------------------------------------------
 
@@ -513,7 +527,7 @@ void setup() {
   Serial.println("Initializing motors");
   motor_right.Initialize();
   motor_left.Initialize();
-  _mStop();
+  //_mStop();
   Serial.println("Motor Initialized");
 
    
@@ -528,7 +542,7 @@ void setup() {
     
 #ifdef CONTROL_PID//************************  PID  *********
     // PID controller setup
-    setupPid();
+    setupPids();
 #endif // CONTROL_PID//************************  PID  ********* 
 
                     }
@@ -542,7 +556,9 @@ void setup() {
   // Connect to WiFi network
   Serial.println();
   Serial.println();
-
+  
+  //read file from spiff
+	PrepareFile();
  //parte wifi comune a ESP8266WiFi.h  e  ESP8266WebServer.h
   wifi.autoConnect("AutoConnectAP");
  
@@ -553,8 +569,27 @@ void setup() {
   Serial.println("");
   Serial.println("WiFi connected");
  
+     // start webSocket server
+    webSocket.begin();
+    webSocket.onEvent(webSocketEvent);
+
+    if(MDNS.begin("esp8266")) {
+        Serial.println("MDNS responder started");
+    }
+
+    // handle index
+    server.on("/", []() {
+        // send home.html
+        server.send(200, "text/html", html_home);
+    });
   // Start the server
-  server.begin();
+    server.begin();
+
+    // Add service to MDNS
+    MDNS.addService("http", "tcp", 80);
+    MDNS.addService("ws", "tcp", 81);
+ 
+
   Serial.println("Server started");
  
   // Print the IP address
@@ -562,11 +597,11 @@ void setup() {
   Serial.print("http://");
   Serial.print(WiFi.localIP());
   Serial.println("/");
-//#endif                  //--------------------------------------------------------------------ESP8266WEBSERVER---------
+#endif                  //--------------------------------------------------------------------ESP8266WEBSERVER---------
 //  
 // //Parte WebServer piu veloce che quella dell Esempio WifiBlink perche non nel loop
 //#ifdef ESP8266WEBSERVER //--------------------------------------------------------------------ESP8266WEBSERVER---------
-
+/*
 //parte per visualizzare dati
  server.on("/Kp.txt", [](){
    server.send(200, "text/html", (String)Kp);
@@ -727,9 +762,58 @@ Serial.println("Server listening");
  //end Parte WebServer piu veloce che quella dell Esempio WifiBlink perche non nel loop
 
 loop_timer = micros();
+*/
 }
  
 void loop() {
+  
+  // read information from wifi
+  // no need because we are using websockets 
+  
+  // get timer and dt
+  
+	timer_value = millis();
+    dt = (timer_value - timer_old);
+    timer_old = timer_value;
+  
+  // get robot angle
+  
+  /*
+      angle_adjusted_Old = angle_adjusted;
+    // Get new orientation angle from IMU (MPU6050)
+    angle_adjusted = dmpGetPhi();
+	*/
+  
+  // get robot speed 
+  
+  /*
+      actual_robot_speed_Old = actual_robot_speed;
+    actual_robot_speed = (speed_M1 + speed_M2) / 2; // Positive: forward
+
+    int16_t angular_velocity = (angle_adjusted - angle_adjusted_Old) * 90.0; // 90 is an empirical extracted factor to adjust for real units
+    int16_t estimated_speed = -actual_robot_speed_Old - angular_velocity;     // We use robot_speed(t-1) or (t-2) to compensate the delay
+    estimated_speed_filtered = estimated_speed_filtered * 0.95 + (float)estimated_speed * 0.05;  // low pass filter on estimated speed
+
+  */
+  
+  // get angle from throttle PI 
+  /*
+      actual_robot_speed_Old = actual_robot_speed;
+    actual_robot_speed = (speed_M1 + speed_M2) / 2; // Positive: forward
+
+    int16_t angular_velocity = (angle_adjusted - angle_adjusted_Old) * 90.0; // 90 is an empirical extracted factor to adjust for real units
+    int16_t estimated_speed = -actual_robot_speed_Old - angular_velocity;     // We use robot_speed(t-1) or (t-2) to compensate the delay
+    estimated_speed_filtered = estimated_speed_filtered * 0.95 + (float)estimated_speed * 0.05;  // low pass filter on estimated speed
+*/
+  
+  // get speed from stability PD
+  
+  /*
+      control_output += stabilityPDControl(dt, angle_adjusted, target_angle, Kp, Kd);
+    control_output = constrain(control_output, -MAX_CONTROL_OUTPUT, MAX_CONTROL_OUTPUT); // Limit max output from control
+
+  */
+  
   
 //double inizio_loop = millis();
  inizio_loop_us = micros();
